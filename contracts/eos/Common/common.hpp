@@ -14,6 +14,11 @@
 using std::string;
 using std::vector;
 
+#define BANCOR_X "bancorxoneos"_n
+#define BANCOR_NETWORK "thisisbancor"_n
+#define BNT_TOKEN "bntbntbntbnt"_n
+#define USER_GENERATED_TOKENS "bancortokens"_n
+
 vector<string> split(const string& str, const string& delim)
 {
     vector<string> tokens;
