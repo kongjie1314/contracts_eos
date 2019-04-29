@@ -46,7 +46,7 @@ using std::vector;
     This is a security mechanism that prevents the need to keep a very large
     (and valuable) balance in a single contract.
 */
-CONTRACT BancorConverter : public eosio::contract {
+CONTRACT UserGeneratedConverters : public eosio::contract {
     using contract::contract;
     public:
 
@@ -58,38 +58,37 @@ CONTRACT BancorConverter : public eosio::contract {
 
         typedef struct Reserve {
             name           contract;
-            symbol_code    currency_code;
-            uint16_t       ratio;
+            asset          currency;
+            uint64_t       ratio;
             bool           p_enabled;
         } Reserve;
 
         TABLE converter_t {
-            symbol_code     currency_code;
+            asset           currency;
+            name            owner;
             vector<Reserve> reserves;
             bool            smart_enabled;
             bool            require_balance;
             uint16_t        fee;
-            uint64_t        primary_key() const { return currency_code.raw(); }
-        }
+            uint64_t        primary_key() const { return currency.symbol.code().raw(); }
+        };
 
         typedef eosio::singleton<"settings"_n, settings_t> settings;
         typedef eosio::multi_index<"settings"_n, settings_t> dummy_for_abi; // hack until abi generator generates correct name
         typedef eosio::multi_index<"converters"_n, converter_t> converters;
 
-        // initializes the converter settings
-        // can only be called once, by the contract account
-        ACTION create(name smart_contract,    // contract name of the smart token governed by the converter
-                    asset smart_currency,   // currency of the smart token governed by the converter
+        // initializes a new converter
+        ACTION create(name owner,           // the converter creator
+                    asset currency,         // currency of the smart token governed by the converter
                     bool  smart_enabled,    // true if the smart token can be converted to/from, false if not
-                    bool  enabled,          // true if conversions are enabled, false if not
                     bool  require_balance,  // true if conversions that require creating new balance for the calling account should fail, false if not
-                    uint16_t max_fee,       // maximum conversion fee percentage, 0-1000
                     uint16_t fee);          // conversion fee percentage, must be lower than the maximum fee, 0-1000
 
+        ACTION setsettings(bool conversions_enabled, uint16_t max_fee);
         // updates the converter settings
         // can only be called by the contract account
-        ACTION update(bool smart_enabled,    // true if the smart token can be converted to/from, false if not
-                      bool enabled,          // true if conversions are enabled, false if not
+        ACTION update(asset currency,         // the currency governed by the converter
+                      bool smart_enabled,    // true if the smart token can be converted to/from, false if not
                       bool require_balance,  // true if conversions that require creating new balance for the calling account should fail, false if not
                       uint16_t fee);         // conversion fee percentage, must be lower than the maximum fee, 0-1000
         
@@ -97,7 +96,7 @@ CONTRACT BancorConverter : public eosio::contract {
         // can also be used to update an existing reserve, can only be called by the contract account
         ACTION setreserve(name contract,        // reserve token contract name
                           asset    currency,    // reserve token currency
-                          uint16_t ratio,       // reserve ratio, percentage, 0-1000
+                          uint64_t ratio,       // reserve ratio, percentage, 0-1000
                           bool     p_enabled);  // true if purchases are enabled with the reserve, false if not
 
         // transfer intercepts
@@ -110,7 +109,7 @@ CONTRACT BancorConverter : public eosio::contract {
 
     private:
         void convert(name from, eosio::asset quantity, std::string memo, name code);
-        const reserve_t& get_reserve(uint64_t name, const settings_t& settings);
+        const Reserve& get_reserve(uint64_t name, const converter_t& converter);
 
         asset get_balance(name contract, name owner, symbol_code sym);
         uint64_t get_balance_amount(name contract, name owner, symbol_code sym);
