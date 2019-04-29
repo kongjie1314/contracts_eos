@@ -39,19 +39,20 @@ ACTION BancorConverter::create(symbol_code currency_code,
                              bool  smart_enabled,
                              bool  require_balance,
                              uint16_t fee) {
-    // TODO: get settings table... etc
+    settings settings_table(_self, _self.value);
+    const auto& st = settings_table.get();
     eosio_assert(fee <= st.max_fee, "fee must be lower or equal to the maximum fee");
 
     converters converters_table(_self, currency_code.raw());
-    bool settings_exists = converters_table.exists();
-    eosio_assert(!settings_exists, "converter for the given currency code already exists");
-
-    settings_t new_settings;
-    new_settings.currency_code   = currency_code;
-    new_settings.smart_enabled   = smart_enabled;
-    new_settings.require_balance = require_balance;
-    new_settings.fee             = fee;
-    settings_table.set(new_settings, _self);
+    bool converter_exists = converters_table.exists();
+    eosio_assert(!converter_exists, "converter for the given currency code already exists");
+    
+    converters_table.emplace(_self, [&](auto& c) {
+        c.currency_code   = currency_code;
+        c.smart_enabled   = smart_enabled;
+        c.require_balance = require_balance;
+        c.fee             = fee;
+    });
 }
 
 ACTION BancorConverter::update(bool smart_enabled, bool enabled, bool require_balance, uint64_t fee) {
