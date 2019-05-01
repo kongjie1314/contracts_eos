@@ -65,7 +65,7 @@ void UserGeneratedConverters::createatomic(name owner,
         ).send();
 }
 
-ACTION UserGeneratedConverters::setsettings(bool conversions_enabled, uint16_t max_fee) {
+ACTION UserGeneratedConverters::setsettings(bool enabled, uint16_t max_fee) {
     require_auth(_self);
 
     eosio_assert(max_fee <= 1000, "max fee must be lower or equal to 1000");
@@ -73,7 +73,7 @@ ACTION UserGeneratedConverters::setsettings(bool conversions_enabled, uint16_t m
     settings settings_table(_self, _self.value);
 
     settings_t new_settings;
-    new_settings.conversions_enabled  = conversions_enabled;
+    new_settings.enabled  = enabled;
     new_settings.max_fee              = max_fee;
 
     settings_table.set(new_settings, _self);
@@ -156,7 +156,7 @@ void UserGeneratedConverters::convert(name from, asset quantity, string memo, na
     converters converters_table(_self, symbol_code(memo_object.converters[0].sym).raw());
     auto converter = converters_table.require_find(symbol_code(memo_object.converters[0].sym).raw(), "converter does not exist");
 
-    eosio_assert(settings.conversions_enabled && converter->enabled, "conversions are disabled");
+    eosio_assert(settings.enabled && converter->enabled, "conversions are disabled");
     eosio_assert(from == BANCOR_NETWORK, "converter can only receive from network contract");
 
     eosio_assert(memo_object.converters[0].account == _self, "wrong converter");

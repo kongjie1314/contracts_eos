@@ -76,7 +76,7 @@ module.exports = async function(deployer, network, accounts) {
     await deployer.deploy(UserGeneratedTokens, "bancortokens");
     const userGeneratedConvertersContract = await deployer.deploy(UserGeneratedConverters, "bancorconvrt");
     await userGeneratedConvertersContract.contractInstance.setsettings({
-        conversions_enabled: 1,
+        enabled: 1,
         max_fee: 30
     }, { authorization: `${userGeneratedConvertersContract.contract.address}@active`});
     await deployer.deploy(XTransferRerouter, "txrerouter");

@@ -51,9 +51,9 @@ CONTRACT UserGeneratedConverters : public eosio::contract {
     public:
 
         TABLE settings_t {
-            bool     conversions_enabled;
+            bool     enabled;
             uint16_t max_fee;
-            EOSLIB_SERIALIZE(settings_t, (conversions_enabled)(max_fee))
+            EOSLIB_SERIALIZE(settings_t, (enabled)(max_fee))
         };
 
         typedef struct Reserve {
@@ -85,7 +85,7 @@ CONTRACT UserGeneratedConverters : public eosio::contract {
                     bool  require_balance,  // true if conversions that require creating new balance for the calling account should fail, false if not
                     uint16_t fee);          // conversion fee percentage, must be lower than the maximum fee, 0-1000
 
-        ACTION setsettings(bool conversions_enabled, uint16_t max_fee);
+        ACTION setsettings(bool enabled, uint16_t max_fee);
         // updates the converter settings
         // can only be called by the contract account
         ACTION update(asset    currency,         // the currency governed by the converter
