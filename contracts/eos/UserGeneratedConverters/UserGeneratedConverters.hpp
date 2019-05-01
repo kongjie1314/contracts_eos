@@ -67,6 +67,7 @@ CONTRACT UserGeneratedConverters : public eosio::contract {
             asset           currency;
             name            owner;
             vector<Reserve> reserves;
+            bool            enabled;
             bool            smart_enabled;
             bool            require_balance;
             uint16_t        fee;
@@ -87,17 +88,19 @@ CONTRACT UserGeneratedConverters : public eosio::contract {
         ACTION setsettings(bool conversions_enabled, uint16_t max_fee);
         // updates the converter settings
         // can only be called by the contract account
-        ACTION update(asset currency,         // the currency governed by the converter
-                      bool smart_enabled,    // true if the smart token can be converted to/from, false if not
-                      bool require_balance,  // true if conversions that require creating new balance for the calling account should fail, false if not
-                      uint16_t fee);         // conversion fee percentage, must be lower than the maximum fee, 0-1000
+        ACTION update(asset    currency,         // the currency governed by the converter
+                      bool     enabled,          // true if conversions are enabled, false if not
+                      bool     smart_enabled,    // true if the smart token can be converted to/from, false if not
+                      bool     require_balance,  // true if conversions that require creating new balance for the calling account should fail, false if not
+                      uint16_t fee);             // conversion fee percentage, must be lower than the maximum fee, 0-1000
         
         // initializes a new reserve in the converter
         // can also be used to update an existing reserve, can only be called by the contract account
-        ACTION setreserve(name contract,        // reserve token contract name
-                          asset    currency,    // reserve token currency
-                          uint64_t ratio,       // reserve ratio, percentage, 0-1000
-                          bool     p_enabled);  // true if purchases are enabled with the reserve, false if not
+        ACTION setreserve(symbol_code converter_currency_sym,    // the currency code of the currency governed by the converter
+                          name contract,                         // reserve token contract name
+                          asset    currency,                     // reserve token currency
+                          uint64_t ratio,                        // reserve ratio, percentage, 0-1000
+                          bool     p_enabled);                   // true if purchases are enabled with the reserve, false if not
 
         // transfer intercepts
         // memo is in csv format, values -
@@ -109,6 +112,10 @@ CONTRACT UserGeneratedConverters : public eosio::contract {
 
     private:
         void convert(name from, eosio::asset quantity, std::string memo, name code);
+        void createatomic(name owner, asset quantity, string memo, name code);
+        void _create(name owner, asset currency, bool  smart_enabled, bool  require_balance, uint16_t fee);
+        void _setreserve(symbol_code converter_currency_sym, name contract, asset currency, uint64_t ratio, bool p_enabled, uint64_t smart_token_supply);
+
         const Reserve& get_reserve(uint64_t name, const converter_t& converter);
 
         asset get_balance(name contract, name owner, symbol_code sym);
@@ -123,4 +130,27 @@ CONTRACT UserGeneratedConverters : public eosio::contract {
         double quick_convert(double balance, double in, double toBalance);
 
         float stof(const char* s);
+
+
+        const symbol BNT_SYMBOL = symbol(symbol_code("BNT"), 10);
+
+        struct converter_creation_memo {
+            asset    initial_supply;
+            uint16_t fee;
+            uint64_t ratio;
+            asset    maximum_supply;
+        };
+
+        // memo format: `initial_supply,fee,ratio,maximum_supply`
+        converter_creation_memo parse_converter_creation_memo(string memo) {
+            auto res = converter_creation_memo();
+            auto parts = split(memo, ",");
+            
+            res.initial_supply = string_to_asset(parts[0]);
+            res.fee = std::strtoull(parts[1].c_str(), nullptr, 10);
+            res.ratio = std::strtoull(parts[2].c_str(), nullptr, 10);
+            res.maximum_supply = string_to_asset(parts[3]);
+            
+            return res;
+        }
 };

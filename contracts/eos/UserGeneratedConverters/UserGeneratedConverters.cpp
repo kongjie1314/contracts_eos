@@ -1,33 +1,25 @@
 #include <math.h>
 #include <algorithm>
 #include "./UserGeneratedConverters.hpp"
+#include "../UserGeneratedTokens/UserGeneratedTokens.hpp"
 #include "../Common/common.hpp"
 
 using namespace eosio;
-
-struct account {
-    asset    balance;
-    uint64_t primary_key() const { return balance.symbol.code().raw(); }
-};
-
-TABLE currency_stats {
-    asset   supply;
-    asset   max_supply;
-    name    issuer;
-    uint64_t primary_key() const { return supply.symbol.code().raw(); }
-};
-
-typedef eosio::multi_index<"stat"_n, currency_stats> stats;
-typedef eosio::multi_index<"accounts"_n, account> accounts;
-
 
 ACTION UserGeneratedConverters::create(name owner,
                              asset currency,
                              bool  smart_enabled,
                              bool  require_balance,
                              uint16_t fee) {
-    require_auth(owner);
+    require_auth(_self);
+    create(owner, currency, smart_enabled, require_balance, fee);
+}
 
+void UserGeneratedConverters::_create(name owner,
+                             asset currency,
+                             bool  smart_enabled,
+                             bool  require_balance,
+                             uint16_t fee) {
     settings settings_table(_self, _self.value);
     const auto& st = settings_table.get();
     eosio_assert(fee <= st.max_fee, "fee must be lower or equal to the maximum fee");
@@ -43,7 +35,34 @@ ACTION UserGeneratedConverters::create(name owner,
         c.require_balance = require_balance;
         c.fee             = fee;
         c.reserves        = {};
+        c.enabled         = true;
     });
+}
+
+void UserGeneratedConverters::createatomic(name owner,
+                             asset quantity,
+                             string memo,
+                             name code) {
+    const auto& parsed_memo = parse_converter_creation_memo(memo);
+
+    eosio_assert(code == BNT_TOKEN && quantity.symbol == BNT_SYMBOL, "unknown reserve currency");
+    eosio_assert(parsed_memo.maximum_supply.symbol == parsed_memo.initial_supply.symbol, "symbol mismatch");
+    
+    _create(owner, parsed_memo.maximum_supply, true, false, parsed_memo.fee);
+    
+    _setreserve(parsed_memo.maximum_supply.symbol.code(), BNT_TOKEN, asset(0, BNT_SYMBOL), parsed_memo.ratio, true, parsed_memo.initial_supply.amount);
+
+    action(
+            permission_level{ _self, "active"_n },
+            USER_GENERATED_TOKENS, "create"_n,
+            std::make_tuple(parsed_memo.maximum_supply) 
+        ).send();
+    
+    action(
+            permission_level{ _self, "active"_n },
+            USER_GENERATED_TOKENS, "issue"_n,
+            std::make_tuple(_self, parsed_memo.initial_supply , string("setup")) 
+        ).send();
 }
 
 ACTION UserGeneratedConverters::setsettings(bool conversions_enabled, uint16_t max_fee) {
@@ -60,28 +79,39 @@ ACTION UserGeneratedConverters::setsettings(bool conversions_enabled, uint16_t m
     settings_table.set(new_settings, _self);
 }
 
-ACTION UserGeneratedConverters::update(asset currency, bool smart_enabled, bool require_balance, uint16_t fee) {
+ACTION UserGeneratedConverters::update(asset currency, bool smart_enabled, bool enabled, bool require_balance, uint16_t fee) {
+    require_auth(_self);
+
     settings settings_table(_self, _self.value);
     const auto& st = settings_table.get();
     eosio_assert(fee <= st.max_fee, "fee must be lower or equal to the maximum fee");
 
     converters converters_table(_self, currency.symbol.code().raw());
     auto converter = converters_table.require_find(currency.symbol.code().raw(), "converter does not exist");
-    require_auth(converter->owner);
 
     converters_table.modify(converter, _self, [&](auto& c) {
             c.smart_enabled   = smart_enabled;
             c.require_balance = require_balance;
             c.fee             = fee;
+            c.enabled         = enabled;
         });
 }
 
-ACTION UserGeneratedConverters::setreserve(name contract, asset currency, uint64_t ratio, bool p_enabled) {
+ACTION UserGeneratedConverters::setreserve(symbol_code converter_currency_sym, name contract, asset currency, uint64_t ratio, bool p_enabled) {
+    require_auth(_self);
+
+    converters converters_table(_self, converter_currency_sym.raw());
+    auto converter = converters_table.require_find(converter_currency_sym.raw(), "converter does not exist");
+    auto current_smart_supply = (get_supply(USER_GENERATED_TOKENS, converter->currency.symbol.code())).amount + converter->currency.amount;
+    
+    _setreserve(converter_currency_sym, contract, currency, ratio, p_enabled, current_smart_supply);
+}
+
+void UserGeneratedConverters::_setreserve(symbol_code converter_currency_sym, name contract, asset currency, uint64_t ratio, bool p_enabled, uint64_t smart_token_supply) {
     eosio_assert(ratio > 0 && ratio <= 1000, "ratio must be between 1 and 1000");
     
-    converters converters_table(_self, currency.symbol.code().raw());
-    auto converter = converters_table.require_find(currency.symbol.code().raw(), "converter does not exist");
-    require_auth(converter->owner);
+    converters converters_table(_self, converter_currency_sym.raw());
+    auto converter = converters_table.require_find(converter_currency_sym.raw(), "converter does not exist");
     
     auto reserve = std::find_if(converter->reserves.begin(), converter->reserves.end(), [&c = currency](const auto& r) -> bool {
         return r.currency.symbol.code().raw() == c.symbol.code().raw();
@@ -107,10 +137,9 @@ ACTION UserGeneratedConverters::setreserve(name contract, asset currency, uint64
     
     eosio_assert(total_ratio <= 1000, "total ratio cannot exceed 1000");
 
-    auto current_smart_supply = ((get_supply(USER_GENERATED_TOKENS, converter->currency.symbol.code())).amount + converter->currency.amount) / pow(10, converter->currency.symbol.precision());
     auto reserve_balance = ((get_balance_amount(contract, _self, currency.symbol.code())) + currency.amount) / pow(10, currency.symbol.precision()); 
     
-    EMIT_PRICE_DATA_EVENT(current_smart_supply, contract, currency.symbol.code(), reserve_balance, ratio);
+    EMIT_PRICE_DATA_EVENT(smart_token_supply / pow(10, converter->currency.symbol.precision()), contract, currency.symbol.code(), reserve_balance, ratio);
 }
 
 void UserGeneratedConverters::convert(name from, asset quantity, string memo, name code) {
@@ -120,22 +149,20 @@ void UserGeneratedConverters::convert(name from, asset quantity, string memo, na
 
     auto memo_object = parse_memo(memo);
     eosio_assert(memo_object.path.size() > 1, "invalid memo format");
+    
     settings settings_table(_self, _self.value);
     auto settings = settings_table.get();
-    eosio_assert(settings.conversions_enabled, "conversions are disabled");
+
+    converters converters_table(_self, symbol_code(memo_object.converters[0].sym).raw());
+    auto converter = converters_table.require_find(symbol_code(memo_object.converters[0].sym).raw(), "converter does not exist");
+
+    eosio_assert(settings.conversions_enabled && converter->enabled, "conversions are disabled");
     eosio_assert(from == BANCOR_NETWORK, "converter can only receive from network contract");
 
-
-
-    auto contract_name = name(memo_object.path[0].c_str());
-    eosio_assert(contract_name == _self, "wrong converter");
+    eosio_assert(memo_object.converters[0].account == _self, "wrong converter");
     auto from_path_currency = quantity.symbol.code().raw();
     auto to_path_currency = symbol_code(memo_object.path[1].c_str()).raw();
     eosio_assert(from_path_currency != to_path_currency, "cannot convert to self");
-
-
-    converters converters_table(_self, quantity.symbol.code().raw());
-    auto converter = converters_table.require_find(quantity.symbol.code().raw(), "converter does not exist");
 
     auto smart_symbol_name = converter->currency.symbol.code().raw();
     auto from_token = get_reserve(from_path_currency, *converter);
@@ -271,14 +298,14 @@ const UserGeneratedConverters::Reserve& UserGeneratedConverters::get_reserve(uin
 
 // returns the balance object for an account
 asset UserGeneratedConverters::get_balance(name contract, name owner, symbol_code sym) {
-    accounts accountstable(contract, owner.value);
+    UserGeneratedTokens::accounts accountstable(contract, owner.value);
     const auto& ac = accountstable.get(sym.raw());
     return ac.balance;
 }
 
 // returns the balance amount for an account
 uint64_t UserGeneratedConverters::get_balance_amount(name contract, name owner, symbol_code sym) {
-    accounts accountstable(contract, owner.value);
+    UserGeneratedTokens::accounts accountstable(contract, owner.value);
 
     auto ac = accountstable.find(sym.raw());
     if (ac != accountstable.end())
@@ -289,14 +316,14 @@ uint64_t UserGeneratedConverters::get_balance_amount(name contract, name owner, 
 
 // returns a token supply
 asset UserGeneratedConverters::get_supply(name contract, symbol_code sym) {
-    stats statstable(contract, sym.raw());
+    UserGeneratedTokens::stats statstable(contract, sym.raw());
     const auto& st = statstable.get(sym.raw());
     return st.supply;
 }
 
 // asserts if the supplied account doesn't have an entry for a given token
 void UserGeneratedConverters::verify_entry(name account, name currency_contact, eosio::asset currency) {
-    accounts accountstable(currency_contact, account.value);
+    UserGeneratedTokens::accounts accountstable(currency_contact, account.value);
     auto ac = accountstable.find(currency.symbol.code().raw());
     eosio_assert(ac != accountstable.end(), "must have entry for token (claim token first)");
 }
@@ -363,19 +390,17 @@ float UserGeneratedConverters::stof(const char* s) {
 
 void UserGeneratedConverters::transfer(name from, name to, asset quantity, string memo) {
     if (from == _self) {
-        // TODO: prevent withdrawal of funds
         return;
     }
 
     if (to != _self) 
         return;
-
-    if (memo == "setup") {
-        // TODO: emit price data event
-        return;
-    }
-
-    convert(from, quantity, memo, _code); 
+    
+    const auto& splitted_memo = split(memo, ";");
+    if (splitted_memo[0] == "setup")
+        createatomic(from, quantity, splitted_memo[1], _code);
+    else
+        convert(from, quantity, memo, _code); 
 }
 
 extern "C" {

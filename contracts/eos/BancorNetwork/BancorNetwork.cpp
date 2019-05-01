@@ -1,5 +1,4 @@
 #include "./BancorNetwork.hpp"
-#include "../Common/common.hpp"
 
 using namespace eosio;
 
@@ -15,15 +14,15 @@ void BancorNetwork::transfer(name from, name to, asset quantity, string memo) {
     eosio_assert(quantity.symbol.is_valid(), "invalid quantity in transfer");
     eosio_assert(quantity.amount != 0, "zero quantity is disallowed in transfer");
 
-    auto path = parse_memo_path(memo);
+    auto memo_object = parse_memo(memo);
+    eosio_assert(memo_object.path.size() >= 2, "bad path format");
 
-    eosio_assert(path.size() >= 2, "bad path format");
-    name convert_contract = eosio::name(path[0].c_str());
+    auto next_converter = memo_object.converters[0];
 
     action(
         permission_level{ _self, "active"_n },
         _code, "transfer"_n,
-        std::make_tuple(_self, convert_contract, quantity, memo)
+        std::make_tuple(_self, next_converter.account, quantity, memo)
     ).send();
 }
 

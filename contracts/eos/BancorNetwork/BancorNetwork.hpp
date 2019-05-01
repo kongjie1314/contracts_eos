@@ -4,6 +4,8 @@
 #include <eosiolib/transaction.hpp>
 #include <eosiolib/asset.hpp>
 
+#include "../Common/common.hpp"
+
 using namespace eosio;
 
 using std::string;

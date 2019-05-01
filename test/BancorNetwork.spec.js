@@ -15,9 +15,9 @@ const host = () => {
 describe('BancorNetwork Contract', () => {
     const converter = 'cnvtaa';
     const converter2 = 'cnvtbb';
-    const networkContract = 'bancornetwrk';
+    const networkContract = 'thisisbancor';
     const networkTokenSymbol = "BNT";
-    const networkToken = 'bnt';
+    const networkToken = 'bntbntbntbnt';
     const tokenSymbol = "TKNA";
     const tokenSymbol2 = "TKNB";
     const testUser = 'test1';

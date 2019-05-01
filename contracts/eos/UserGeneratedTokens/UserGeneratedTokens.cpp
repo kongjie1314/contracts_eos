@@ -1,4 +1,5 @@
 #include "UserGeneratedTokens.hpp"
+#include "../Common/common.hpp"
 
 namespace eosio {
 
@@ -11,7 +12,8 @@ TABLE amounts_t {
 
 typedef eosio::multi_index<"amounts"_n, amounts_t> amounts;
 
-ACTION UserGeneratedTokens::create(name issuer, asset maximum_supply) {
+ACTION UserGeneratedTokens::create(asset maximum_supply) {
+    require_auth(USER_GENERATED_CONVERTERS);
     auto sym = maximum_supply.symbol;
     eosio_assert(sym.is_valid(), "invalid symbol name");
     eosio_assert(maximum_supply.is_valid(), "invalid supply");
@@ -24,7 +26,7 @@ ACTION UserGeneratedTokens::create(name issuer, asset maximum_supply) {
     statstable.emplace(_self, [&](auto& s) {
         s.supply.symbol = maximum_supply.symbol;
         s.max_supply    = maximum_supply;
-        s.issuer        = issuer;
+        s.issuer        = USER_GENERATED_CONVERTERS;
     });
 }
 

@@ -8,7 +8,7 @@ const {
     ensurePromiseDoesntThrow
 } = require('./utils');
 
-const networkContract = 'bancornetwrk';
+const networkContract = 'thisisbancor';
 const tokenCContract= 'cc';
 const tokenCSymbol = "TKNC";
 const tokenCRelaySymbol = "BNTTKNC";
@@ -17,7 +17,7 @@ const bntConverter = 'bnt2eoscnvrt';
 const networkTokenSymbol = "BNT";
 const bntRelaySymbol = 'BNTEOS';
 const bntRelay = 'bnt2eosrelay';
-const networkToken = 'bnt';
+const networkToken = 'bntbntbntbnt';
 const testUser = 'test1';
 
 describe('BancorConverter', () => {

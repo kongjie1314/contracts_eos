@@ -1,8 +1,14 @@
-var Token = artifacts.require("./Token/");
-var BancorX = artifacts.require("./BancorX/");
-var BancorNetwork = artifacts.require("./BancorNetwork/");
-var BancorConverter = artifacts.require("./BancorConverter/");
-var XTransferRerouter = artifacts.require("./XTransferRerouter/");
+const Token = artifacts.require("./Token/");
+const BancorX = artifacts.require("./BancorX/");
+const BancorNetwork = artifacts.require("./BancorNetwork/");
+const BancorConverter = artifacts.require("./BancorConverter/");
+const UserGeneratedTokens = artifacts.require("./UserGeneratedTokens/");
+const UserGeneratedConverters = artifacts.require("./UserGeneratedConverters/");
+const XTransferRerouter = artifacts.require("./XTransferRerouter/");
+
+const testAccount1 = { name: 'test1', keys: null };
+const testAccount2 = { name: 'test2', keys: null };
+const testAccount3 = { name: 'test3', keys: null };
 
 async function regConverter(deployer, token, symbol, fee, networkContract, networkToken, networkTokenSymbol, issuerAccount, issuerPrivateKey) {
     const converter = await deployer.deploy(BancorConverter, `cnvt${token}`);
@@ -13,7 +19,7 @@ async function regConverter(deployer, token, symbol, fee, networkContract, netwo
         maximum_supply: `1000000000.00000000 ${symbol}`},
         { authorization: `${tknContract.contract.address}@active`, broadcast: true, sign: true });
 
-    const tknrlyContract = await deployer.deploy(Token, `tkn${networkToken.contract.address}${token}`);
+    const tknrlyContract = await deployer.deploy(Token, `tkn${networkTokenSymbol.toLowerCase()}${token}`);
     var rlySymbol = networkTokenSymbol + symbol;
     await tknrlyContract.contractInstance.create({
         issuer: converter.contract.address,
@@ -65,14 +71,20 @@ async function regConverter(deployer, token, symbol, fee, networkContract, netwo
 
 module.exports = async function(deployer, network, accounts) {
     const bancorxContract = await deployer.deploy(BancorX, "bancorx");
-    const networkContract = await deployer.deploy(BancorNetwork, "bancornetwrk");
-    const tknbntContract = await deployer.deploy(Token, "bnt");
+    const networkContract = await deployer.deploy(BancorNetwork, "thisisbancor");
+    const tknbntContract = await deployer.deploy(Token, "bntbntbntbnt");
+    await deployer.deploy(UserGeneratedTokens, "bancortokens");
+    const userGeneratedConvertersContract = await deployer.deploy(UserGeneratedConverters, "bancorconvrt");
+    await userGeneratedConvertersContract.contractInstance.setsettings({
+        conversions_enabled: 1,
+        max_fee: 30
+    }, { authorization: `${userGeneratedConvertersContract.contract.address}@active`});
     await deployer.deploy(XTransferRerouter, "txrerouter");
 
     const converter = await deployer.deploy(BancorConverter, "bnt2eoscnvrt")
     const bntrlyContract = await deployer.deploy(Token, "bnt2eosrelay");
 
-    var networkTokenSymbol = "BNT";
+    const networkTokenSymbol = "BNT";
 
     // create BNT
     await tknbntContract.contractInstance.create({
@@ -170,7 +182,9 @@ module.exports = async function(deployer, network, accounts) {
     await accounts.getCreateAccount('reporter2');
     await accounts.getCreateAccount('reporter3');
     await accounts.getCreateAccount('reporter4');
-    await accounts.getCreateAccount('test1');
+    testAccount1.keys = await accounts.getCreateAccount(testAccount1.name);
+    testAccount2.keys = await accounts.getCreateAccount(testAccount2.name);
+    testAccount3.keys = await accounts.getCreateAccount(testAccount3.name);
 
     await bancorxContract.contractInstance.addreporter({
         reporter: 'reporter1'},
@@ -194,8 +208,20 @@ module.exports = async function(deployer, network, accounts) {
 
     var contract1 = await bancorxContract.eos.contract(tknbntContract.contract.address);
     await contract1.issue({
-        to: 'test1',
+        to: testAccount1.name,
         quantity: `10000.0000000000 ${networkTokenSymbol}`,
+        memo: "test money"
+    }, { authorization: `${bancorxContract.contract.address}@active`, broadcast: true, sign: true });
+    
+    await contract1.issue({
+        to: testAccount2.name,
+        quantity: `100000.0000000000 ${networkTokenSymbol}`,
+        memo: "test money"
+    }, { authorization: `${bancorxContract.contract.address}@active`, broadcast: true, sign: true });
+
+    await contract1.issue({
+        to: testAccount3.name,
+        quantity: `100000.0000000000 ${networkTokenSymbol}`,
         memo: "test money"
     }, { authorization: `${bancorxContract.contract.address}@active`, broadcast: true, sign: true });
 
@@ -205,13 +231,31 @@ module.exports = async function(deployer, network, accounts) {
         memo: "test money"
         },{authorization: `${bancorxContract.contract.address}@active`,broadcast: true,sign: true});
 
-    for (var i = 0; i < tkns.length; i++) {
+    for (let i = 0; i < tkns.length; i++) {
         const { contract, symbol, fee } = tkns[i];
         await regConverter(deployer, contract, symbol, fee, networkContract, tknbntContract, networkTokenSymbol, bancorxContract.contract.address, bancorxContract.keys.privateKey);    
     }
+    
+    for (const { symbol, creator, fee, ratio } of userGeneratedTkns) {
+        await tknbntContract.contractInstance.transfer({
+            from: creator.name,
+            to: userGeneratedConvertersContract.contract.address,
+            quantity: `10000.0000000000 ${networkTokenSymbol}`,
+            memo: `setup;1000.0000 ${symbol},${fee},${ratio},100000030.0096 ${symbol}`
+        }, {
+            authorization: `${creator.name}@active`,
+            keyProvider: creator.keys.privateKey
+        });
+    }
+        // await registerUserGeneratedConverter(userGeneratedTokensContract, userGeneratedConvertersContract, symbol, creator, networkContract, tknbntContract, networkTokenSymbol, bancorxContract.contract.address, bancorxContract.keys.privateKey);
 };
 
-var tkns = [];
+const tkns = [];
 tkns.push({ contract: "aa", symbol: "TKNA", fee: 0 });
 tkns.push({ contract: "bb", symbol: "TKNB", fee: 1 });
 tkns.push({ contract: "cc", symbol: "TKNC", fee: 0 });
+
+const userGeneratedTkns = [];
+userGeneratedTkns.push({ symbol: "UGTTKNA", creator: testAccount2, fee: 0, ratio: 200 });
+userGeneratedTkns.push({ symbol: "UGTTKNB", creator: testAccount3, fee: 10, ratio: 300 });
+

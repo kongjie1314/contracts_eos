@@ -1,5 +1,5 @@
 {
-    "____comment": "This file was generated with eosio-abigen. DO NOT EDIT Mon Apr 29 12:21:52 2019",
+    "____comment": "This file was generated with eosio-abigen. DO NOT EDIT Wed May  1 13:32:39 2019",
     "version": "eosio::abi/1.0",
     "structs": [
         {
@@ -39,6 +39,10 @@
                 {
                     "name": "reserves",
                     "type": "Reserve[]"
+                },
+                {
+                    "name": "enabled",
+                    "type": "bool"
                 },
                 {
                     "name": "smart_enabled",
@@ -84,6 +88,10 @@
             "name": "setreserve",
             "base": "",
             "fields": [
+                {
+                    "name": "converter_currency_sym",
+                    "type": "symbol_code"
+                },
                 {
                     "name": "contract",
                     "type": "name"
@@ -137,6 +145,10 @@
                 {
                     "name": "currency",
                     "type": "asset"
+                },
+                {
+                    "name": "enabled",
+                    "type": "bool"
                 },
                 {
                     "name": "smart_enabled",
