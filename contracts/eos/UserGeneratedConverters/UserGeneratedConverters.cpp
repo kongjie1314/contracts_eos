@@ -12,7 +12,7 @@ ACTION UserGeneratedConverters::create(name owner,
                              bool  require_balance,
                              uint16_t fee) {
     require_auth(_self);
-    create(owner, currency, smart_enabled, require_balance, fee);
+    _create(owner, currency, smart_enabled, require_balance, fee);
 }
 
 void UserGeneratedConverters::_create(name owner,
