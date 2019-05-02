@@ -61,7 +61,7 @@ void UserGeneratedConverters::createatomic(name owner,
     action(
             permission_level{ _self, "active"_n },
             USER_GENERATED_TOKENS, "issue"_n,
-            std::make_tuple(_self, parsed_memo.initial_supply , string("setup")) 
+            std::make_tuple(owner, parsed_memo.initial_supply , string("setup")) 
         ).send();
 }
 

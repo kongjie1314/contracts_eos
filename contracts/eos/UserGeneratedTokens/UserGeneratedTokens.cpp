@@ -53,9 +53,8 @@ ACTION UserGeneratedTokens::issue(name to, asset quantity, string memo) {
 
     add_balance(st.issuer, quantity, st.issuer);
 
-    if (to != st.issuer) {
-        SEND_INLINE_ACTION(*this, transfer, {st.issuer,"active"_n}, {st.issuer, to, quantity, memo});
-    }
+    if (to != st.issuer)
+        _transfer(st.issuer, to, quantity, memo);
 }
 
 ACTION UserGeneratedTokens::retire(asset quantity, string memo) {
@@ -82,25 +81,8 @@ ACTION UserGeneratedTokens::retire(asset quantity, string memo) {
 }
 
 ACTION UserGeneratedTokens::transfer(name from, name to, asset quantity, string memo) {
-    eosio_assert(from != to, "cannot transfer to self");
     require_auth(from);
-    eosio_assert(is_account(to), "to account does not exist");
-    auto sym = quantity.symbol.code().raw();
-    stats statstable(_self, sym);
-    const auto& st = statstable.get(sym);
-
-    require_recipient(from);
-    require_recipient(to);
-
-    eosio_assert(quantity.is_valid(), "invalid quantity");
-    eosio_assert(quantity.amount > 0, "must transfer positive quantity");
-    eosio_assert(quantity.symbol == st.supply.symbol, "symbol precision mismatch");
-    eosio_assert(memo.size() <= 256, "memo has more than 256 bytes");
-
-    auto payer = has_auth(to) ? to : from;
-
-    sub_balance(from, quantity);
-    add_balance(to, quantity, payer);
+    _transfer(from, to, quantity, memo);
 }
 
 ACTION UserGeneratedTokens::transferbyid(name from, name to, name amount_account, uint64_t amount_id, string memo) {
@@ -118,6 +100,27 @@ ACTION UserGeneratedTokens::transferbyid(name from, name to, name amount_account
         amount_account, "clearamount"_n,
         std::make_tuple(amount_id)
     ).send();
+}
+
+void UserGeneratedTokens::_transfer(name from, name to, asset quantity, string memo) {
+    eosio_assert(from != to, "cannot transfer to self");
+    eosio_assert(is_account(to), "to account does not exist");
+    auto sym = quantity.symbol.code().raw();
+    stats statstable(_self, sym);
+    const auto& st = statstable.get(sym);
+
+    require_recipient(from);
+    require_recipient(to);
+
+    eosio_assert(quantity.is_valid(), "invalid quantity");
+    eosio_assert(quantity.amount > 0, "must transfer positive quantity");
+    eosio_assert(quantity.symbol == st.supply.symbol, "symbol precision mismatch");
+    eosio_assert(memo.size() <= 256, "memo has more than 256 bytes");
+
+    auto payer = has_auth(to) ? to : from;
+
+    sub_balance(from, quantity);
+    add_balance(to, quantity, payer);
 }
 
 void UserGeneratedTokens::sub_balance(name owner, asset value) {

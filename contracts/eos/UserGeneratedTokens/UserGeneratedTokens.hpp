@@ -60,6 +60,7 @@ CONTRACT UserGeneratedTokens : public contract {
         }
 
     private:
+        void _transfer(name from, name to, asset quantity, string memo);
 
         void sub_balance(name owner, asset value);
         void add_balance(name owner, asset value, name ram_payer);
