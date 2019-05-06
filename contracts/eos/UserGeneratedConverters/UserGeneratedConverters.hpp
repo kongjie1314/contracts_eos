@@ -136,7 +136,7 @@ CONTRACT UserGeneratedConverters : public eosio::contract {
         float stof(const char* s);
 
 
-        static constexpr symbol BNT_SYMBOL = symbol(symbol_code("BNT"), 10);
+        const symbol BNT_SYMBOL = symbol(symbol_code("BNT"), 10);
 
         struct converter_creation_memo {
             asset    initial_supply;

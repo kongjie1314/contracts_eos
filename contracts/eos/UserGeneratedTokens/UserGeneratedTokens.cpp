@@ -14,8 +14,10 @@ typedef eosio::multi_index<"amounts"_n, amounts_t> amounts;
 
 ACTION UserGeneratedTokens::create(asset maximum_supply) {
     require_auth(USER_GENERATED_CONVERTERS);
+
     auto sym = maximum_supply.symbol;
     eosio_assert(sym.is_valid(), "invalid symbol name");
+    eosio_assert(sym.code().length() == 7, "token symbol must have exactly 7 characters");
     eosio_assert(maximum_supply.is_valid(), "invalid supply");
     eosio_assert(maximum_supply.amount > 0, "max-supply must be positive");
 
