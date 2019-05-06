@@ -61,6 +61,7 @@ CONTRACT UserGeneratedConverters : public eosio::contract {
             asset          currency;
             uint64_t       ratio;
             bool           p_enabled;
+            asset          balance;
         } Reserve;
 
         TABLE converter_t {
@@ -96,7 +97,7 @@ CONTRACT UserGeneratedConverters : public eosio::contract {
         
         // initializes a new reserve in the converter
         // can also be used to update an existing reserve, can only be called by the contract account
-        ACTION setreserve(symbol_code converter_currency_sym,    // the currency code of the currency governed by the converter
+        ACTION setreserve(symbol_code converter_currency_code,    // the currency code of the currency governed by the converter
                           name contract,                         // reserve token contract name
                           asset    currency,                     // reserve token currency
                           uint64_t ratio,                        // reserve ratio, percentage, 0-1000
@@ -114,12 +115,15 @@ CONTRACT UserGeneratedConverters : public eosio::contract {
         void convert(name from, eosio::asset quantity, std::string memo, name code);
         void createatomic(name owner, asset quantity, string memo, name code);
         void _create(name owner, asset currency, bool  smart_enabled, bool  require_balance, uint16_t fee);
-        void _setreserve(symbol_code converter_currency_sym, name contract, asset currency, uint64_t ratio, bool p_enabled, uint64_t smart_token_supply);
+        void _setreserve(symbol_code converter_currency_code, name contract, asset currency, uint64_t ratio, bool p_enabled, uint64_t smart_token_supply);
 
         const Reserve& get_reserve(uint64_t name, const converter_t& converter);
 
+        void add_reserve_balance(symbol_code converter_currency_code, asset value);
+        void sub_reserve_balance(symbol_code converter_currency_code, asset value);
+
         asset get_balance(name contract, name owner, symbol_code sym);
-        uint64_t get_balance_amount(name contract, name owner, symbol_code sym);
+
         asset get_supply(name contract, symbol_code sym);
 
         void verify_entry(name account, name currency_contact, eosio::asset currency);
@@ -132,7 +136,7 @@ CONTRACT UserGeneratedConverters : public eosio::contract {
         float stof(const char* s);
 
 
-        const symbol BNT_SYMBOL = symbol(symbol_code("BNT"), 10);
+        static constexpr symbol BNT_SYMBOL = symbol(symbol_code("BNT"), 10);
 
         struct converter_creation_memo {
             asset    initial_supply;

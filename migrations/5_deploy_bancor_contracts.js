@@ -247,7 +247,6 @@ module.exports = async function(deployer, network, accounts) {
             keyProvider: creator.keys.privateKey
         });
     }
-        // await registerUserGeneratedConverter(userGeneratedTokensContract, userGeneratedConvertersContract, symbol, creator, networkContract, tknbntContract, networkTokenSymbol, bancorxContract.contract.address, bancorxContract.keys.privateKey);
 };
 
 const tkns = [];

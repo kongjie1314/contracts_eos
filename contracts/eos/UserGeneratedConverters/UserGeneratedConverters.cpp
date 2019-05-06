@@ -51,6 +51,7 @@ void UserGeneratedConverters::createatomic(name owner,
     _create(owner, parsed_memo.maximum_supply, true, false, parsed_memo.fee);
     
     _setreserve(parsed_memo.maximum_supply.symbol.code(), BNT_TOKEN, asset(0, BNT_SYMBOL), parsed_memo.ratio, true, parsed_memo.initial_supply.amount);
+    add_reserve_balance(parsed_memo.maximum_supply.symbol.code(), quantity);
 
     action(
             permission_level{ _self, "active"_n },
@@ -97,21 +98,53 @@ ACTION UserGeneratedConverters::update(asset currency, bool smart_enabled, bool 
         });
 }
 
-ACTION UserGeneratedConverters::setreserve(symbol_code converter_currency_sym, name contract, asset currency, uint64_t ratio, bool p_enabled) {
+ACTION UserGeneratedConverters::setreserve(symbol_code converter_currency_code, name contract, asset currency, uint64_t ratio, bool p_enabled) {
     require_auth(_self);
 
-    converters converters_table(_self, converter_currency_sym.raw());
-    auto converter = converters_table.require_find(converter_currency_sym.raw(), "converter does not exist");
+    converters converters_table(_self, converter_currency_code.raw());
+    auto converter = converters_table.require_find(converter_currency_code.raw(), "converter does not exist");
     auto current_smart_supply = (get_supply(USER_GENERATED_TOKENS, converter->currency.symbol.code())).amount + converter->currency.amount;
     
-    _setreserve(converter_currency_sym, contract, currency, ratio, p_enabled, current_smart_supply);
+    _setreserve(converter_currency_code, contract, currency, ratio, p_enabled, current_smart_supply);
 }
 
-void UserGeneratedConverters::_setreserve(symbol_code converter_currency_sym, name contract, asset currency, uint64_t ratio, bool p_enabled, uint64_t smart_token_supply) {
+void UserGeneratedConverters::add_reserve_balance(symbol_code converter_currency_code, asset value) {
+    converters converters_table(_self, converter_currency_code.raw());
+    auto converter = converters_table.require_find(converter_currency_code.raw(), "converter does not exist");
+    
+    auto reserve = std::find_if(converter->reserves.begin(), converter->reserves.end(), [&reserve_sym = value.symbol](const auto& r) -> bool {
+        return r.currency.symbol.code().raw() == reserve_sym.code().raw();
+        });
+    
+    eosio_assert(reserve != converter->reserves.end(), "reserve not found");
+
+    converters_table.modify(converter, _self, [&](auto& c) {
+        int reserve_index = std::distance(converter->reserves.begin(), reserve);
+        c.reserves[reserve_index].balance += value;
+    });
+}
+
+void UserGeneratedConverters::sub_reserve_balance(symbol_code converter_currency_code, asset value) {
+    converters converters_table(_self, converter_currency_code.raw());
+    auto converter = converters_table.require_find(converter_currency_code.raw(), "converter does not exist");
+    
+    auto reserve = std::find_if(converter->reserves.begin(), converter->reserves.end(), [&reserve_sym = value.symbol](const auto& r) -> bool {
+        return r.currency.symbol.code().raw() == reserve_sym.code().raw();
+        });
+    
+    eosio_assert(reserve != converter->reserves.end(), "reserve not found");
+
+    converters_table.modify(converter, _self, [&](auto& c) {
+        int reserve_index = std::distance(converter->reserves.begin(), reserve);
+        c.reserves[reserve_index].balance -= value;
+    });
+}
+
+void UserGeneratedConverters::_setreserve(symbol_code converter_currency_code, name contract, asset currency, uint64_t ratio, bool p_enabled, uint64_t smart_token_supply) {
     eosio_assert(ratio > 0 && ratio <= 1000, "ratio must be between 1 and 1000");
     
-    converters converters_table(_self, converter_currency_sym.raw());
-    auto converter = converters_table.require_find(converter_currency_sym.raw(), "converter does not exist");
+    converters converters_table(_self, converter_currency_code.raw());
+    auto converter = converters_table.require_find(converter_currency_code.raw(), "converter does not exist");
     
     auto reserve = std::find_if(converter->reserves.begin(), converter->reserves.end(), [&c = currency](const auto& r) -> bool {
         return r.currency.symbol.code().raw() == c.symbol.code().raw();
@@ -120,7 +153,7 @@ void UserGeneratedConverters::_setreserve(symbol_code converter_currency_sym, na
 
     converters_table.modify(converter, _self, [&](auto& c) {
         if (reserve == c.reserves.end()) {
-            c.reserves.push_back({ contract, currency, ratio, p_enabled });
+            c.reserves.push_back({ contract, currency, ratio, p_enabled, asset(0, currency.symbol) });
         }
         else {
             eosio_assert(reserve->contract == contract, "cannot update the reserve contract name");
@@ -136,10 +169,11 @@ void UserGeneratedConverters::_setreserve(symbol_code converter_currency_sym, na
         total_ratio += reserve.ratio;
     
     eosio_assert(total_ratio <= 1000, "total ratio cannot exceed 1000");
-
-    auto reserve_balance = ((get_balance_amount(contract, _self, currency.symbol.code())) + currency.amount) / pow(10, currency.symbol.precision()); 
     
-    EMIT_PRICE_DATA_EVENT(smart_token_supply / pow(10, converter->currency.symbol.precision()), contract, currency.symbol.code(), reserve_balance, ratio);
+    if (reserve != converter->reserves.end()) {
+        auto reserve_balance = (reserve->balance.amount + currency.amount) / pow(10, currency.symbol.precision()); 
+        EMIT_PRICE_DATA_EVENT(smart_token_supply / pow(10, converter->currency.symbol.precision()), contract, currency.symbol.code(), reserve_balance, ratio);
+    }
 }
 
 void UserGeneratedConverters::convert(name from, asset quantity, string memo, name code) {
@@ -184,8 +218,26 @@ void UserGeneratedConverters::convert(name from, asset quantity, string memo, na
 
     eosio_assert(to_token.p_enabled, "'to' token purchases disabled");
     eosio_assert(code == from_contract, "unknown 'from' contract");
-    auto current_from_balance = ((get_balance(from_contract, _self, from_currency.symbol.code())).amount + from_currency.amount - quantity.amount) / pow(10, from_currency.symbol.precision()); 
-    auto current_to_balance = ((get_balance(to_contract, _self, to_currency.symbol.code())).amount + to_currency.amount) / pow(10, to_currency_precision);
+    
+    double current_from_balance;
+    double current_to_balance;
+    if (incoming_smart_token) {
+        current_from_balance = ((get_balance(from_contract, _self, from_currency.symbol.code())).amount + from_currency.amount - quantity.amount) / pow(10, from_currency.symbol.precision());
+        current_to_balance = (to_token.balance.amount + to_currency.amount) / pow(10, to_currency_precision);
+    }
+    else if (outgoing_smart_token) {
+        current_from_balance = (from_token.balance.amount + from_currency.amount - quantity.amount) / pow(10, from_currency.symbol.precision());
+        current_to_balance = ((get_balance(to_contract, _self, to_currency.symbol.code())).amount + to_currency.amount) / pow(10, to_currency_precision);
+
+        add_reserve_balance(converter->currency.symbol.code(), quantity);
+    }
+    else {
+        current_from_balance = (from_token.balance.amount + from_currency.amount - quantity.amount) / pow(10, from_currency.symbol.precision());
+        current_to_balance = ((get_balance(to_contract, _self, to_currency.symbol.code())).amount + to_currency.amount) / pow(10, to_currency_precision);
+
+        add_reserve_balance(converter->currency.symbol.code(), quantity);
+    }
+
     auto current_smart_supply = ((get_supply(USER_GENERATED_TOKENS, converter->currency.symbol.code())).amount + converter->currency.amount) / pow(10, converter->currency.symbol.precision());
 
     name final_to = name(memo_object.dest_account.c_str());
@@ -271,12 +323,15 @@ void UserGeneratedConverters::convert(name from, asset quantity, string memo, na
             to_contract, "issue"_n,
             std::make_tuple(inner_to, new_asset, new_memo) 
         ).send();
-    else
+    else {
+        sub_reserve_balance(converter->currency.symbol.code(), new_asset);
+        
         action(
             permission_level{ _self, "active"_n },
             to_contract, "transfer"_n,
             std::make_tuple(_self, inner_to, new_asset, new_memo)
         ).send();
+    }
 }
 
  // returns a reserve object
@@ -301,17 +356,6 @@ asset UserGeneratedConverters::get_balance(name contract, name owner, symbol_cod
     UserGeneratedTokens::accounts accountstable(contract, owner.value);
     const auto& ac = accountstable.get(sym.raw());
     return ac.balance;
-}
-
-// returns the balance amount for an account
-uint64_t UserGeneratedConverters::get_balance_amount(name contract, name owner, symbol_code sym) {
-    UserGeneratedTokens::accounts accountstable(contract, owner.value);
-
-    auto ac = accountstable.find(sym.raw());
-    if (ac != accountstable.end())
-        return ac->balance.amount;
-
-    return 0;
 }
 
 // returns a token supply
