@@ -172,7 +172,7 @@ void UserGeneratedConverters::_setreserve(symbol_code converter_currency_code, n
     
     if (reserve != converter->reserves.end()) {
         auto reserve_balance = (reserve->balance.amount + currency.amount) / pow(10, currency.symbol.precision()); 
-        EMIT_PRICE_DATA_EVENT(smart_token_supply / pow(10, converter->currency.symbol.precision()), contract, currency.symbol.code(), reserve_balance, ratio);
+        EMIT_PRICE_DATA_EVENT(converter_currency_code, smart_token_supply / pow(10, converter->currency.symbol.precision()), contract, currency.symbol.code(), reserve_balance, ratio);
     }
 }
 
@@ -187,8 +187,10 @@ void UserGeneratedConverters::convert(name from, asset quantity, string memo, na
     settings settings_table(_self, _self.value);
     auto settings = settings_table.get();
 
-    converters converters_table(_self, symbol_code(memo_object.converters[0].sym).raw());
-    auto converter = converters_table.require_find(symbol_code(memo_object.converters[0].sym).raw(), "converter does not exist");
+    symbol_code converter_currency_code = symbol_code(memo_object.converters[0].sym);
+
+    converters converters_table(_self, converter_currency_code.raw());
+    auto converter = converters_table.require_find(converter_currency_code.raw(), "converter does not exist");
 
     eosio_assert(settings.enabled && converter->enabled, "conversions are disabled");
     eosio_assert(from == BANCOR_NETWORK, "converter can only receive from network contract");
@@ -295,12 +297,12 @@ void UserGeneratedConverters::convert(name from, asset quantity, string memo, na
     int64_t to_amount = (to_tokens * pow(10, to_currency_precision));
 
     double formatted_total_fee_amount = (int)(total_fee_amount * pow(10, to_currency_precision)) / pow(10, to_currency_precision);
-    EMIT_CONVERSION_EVENT(memo, from_token.contract, from_currency.symbol.code(), to_token.contract, to_currency.symbol.code(), from_amount, (to_amount / pow(10, to_currency_precision)), formatted_total_fee_amount);
+    EMIT_CONVERSION_EVENT(memo, from_token.contract, from_currency.symbol.code(), to_token.contract, converter_currency_code ,to_currency.symbol.code(), from_amount, (to_amount / pow(10, to_currency_precision)), formatted_total_fee_amount);
 
     if (incoming_smart_token || !outgoing_smart_token)
-        EMIT_PRICE_DATA_EVENT(current_smart_supply, to_token.contract, to_currency.symbol.code(), current_to_balance - to_amount, (to_ratio / 1000.0));
+        EMIT_PRICE_DATA_EVENT(converter_currency_code, current_smart_supply, to_token.contract, to_currency.symbol.code(), current_to_balance - to_amount, (to_ratio / 1000.0));
     if (outgoing_smart_token || !incoming_smart_token)
-        EMIT_PRICE_DATA_EVENT(current_smart_supply, from_token.contract, from_currency.symbol.code(), current_from_balance, (from_ratio / 1000.0));
+        EMIT_PRICE_DATA_EVENT(converter_currency_code, current_smart_supply, from_token.contract, from_currency.symbol.code(), current_from_balance, (from_ratio / 1000.0));
 
     path new_path = memo_object.path;
     new_path.erase(new_path.begin(), new_path.begin() + 2);

@@ -13,12 +13,13 @@ using std::vector;
 
 // events
 // triggered when a conversion between two tokens occurs
-#define EMIT_CONVERSION_EVENT(memo, from_contract, from_symbol, to_contract, to_symbol, from_amount, to_amount, fee_amount) \
-    START_EVENT("conversion", "1.2") \
+#define EMIT_CONVERSION_EVENT(memo, from_contract, from_symbol, to_contract, converter_currency_symbol, to_symbol, from_amount, to_amount, fee_amount) \
+    START_EVENT("conversion", "1.3") \
     EVENTKV("memo", memo) \
     EVENTKV("from_contract", from_contract) \
     EVENTKV("from_symbol", from_symbol) \
     EVENTKV("to_contract", to_contract) \
+    EVENTKV("converter_currency_symbol", converter_currency_symbol) \
     EVENTKV("to_symbol", to_symbol) \
     EVENTKV("amount", from_amount) \
     EVENTKV("return", to_amount) \
@@ -26,8 +27,9 @@ using std::vector;
     END_EVENT()
 
 // triggered after a conversion with new tokens price data
-#define EMIT_PRICE_DATA_EVENT(smart_supply, reserve_contract, reserve_symbol, reserve_balance, reserve_ratio) \
-    START_EVENT("price_data", "1.2") \
+#define EMIT_PRICE_DATA_EVENT(converter_currency_symbol, smart_supply, reserve_contract, reserve_symbol, reserve_balance, reserve_ratio) \
+    START_EVENT("price_data", "1.3") \
+    EVENTKV("converter_currency_symbol", converter_currency_symbol) \
     EVENTKV("smart_supply", smart_supply) \
     EVENTKV("reserve_contract", reserve_contract) \
     EVENTKV("reserve_symbol", reserve_symbol) \
